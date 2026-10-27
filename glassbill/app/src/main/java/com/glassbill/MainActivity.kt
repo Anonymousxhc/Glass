@@ -587,8 +587,8 @@ private fun FloatingNavigation(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .onSizeChanged { barWidth = it.width }
-                .padding(PaddingValues(horizontal = 8.dp, vertical = 10.dp)),
+                .padding(PaddingValues(horizontal = 8.dp, vertical = 10.dp))
+                .onSizeChanged { barWidth = it.width },
         ) {
             // Sliding glass indicator pill
             if (tabWidthPx > 0) {
