@@ -23,3 +23,13 @@ GitHub Actions is responsible for Android artifacts.
 The app remains minSdk 29 and compile/target SDK 36. The current Apache-licensed Backdrop and Miuix artifacts are compiled with SDK 37 metadata, so `android.experimental.disableCompileSdkChecks=true` is deliberately scoped in `gradle.properties`. The code retains a Flat visual fallback; CI/runtime validation is required before relying on shader paths beyond API 36.
 
 AGP 9.1's built-in Kotlin is temporarily disabled because the M1 Room schema still uses KAPT. Migrate Room to a built-in-Kotlin-compatible processor path before removing this compatibility setting.
+
+## Local arm64 hosts
+
+AGP's bundled AAPT2 is x86-64. On an arm64 host, add the following line to a local (gitignored) `gradle.properties` override before running the gate:
+
+```
+android.aapt2FromMavenOverride=/path/to/arm64/build-tools/35.0.2/build-tools/aapt2
+```
+
+GitHub Actions runners are x86-64 and do not need this override.
