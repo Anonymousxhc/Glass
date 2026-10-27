@@ -174,7 +174,7 @@ private fun DashboardContent(
                 vouchers = controller.vouchers.collectAsState().value,
                 parties = parties,
                 items = controller.items.collectAsState().value,
-                onCreateSale = { party, lines -> controller.createSale(party, lines) },
+                onCreateVoucher = { k, party, lines -> controller.createVoucher(k, party, lines) },
                 onDelete = { controller.deleteVoucher(it) },
             )
         }
@@ -380,23 +380,26 @@ private fun BillList(
     vouchers: List<Voucher>,
     parties: List<Party>,
     items: List<CatalogItem>,
-    onCreateSale: (Party?, List<VoucherLine>) -> Unit,
+    onCreateVoucher: (com.glassbill.domain.DocumentKind, Party?, List<VoucherLine>) -> Unit,
     onDelete: (String) -> Unit,
 ) {
     var showDialog by remember { mutableStateOf(false) }
+    var kind by remember { mutableStateOf("Sale") }
     var itemName by remember { mutableStateOf("") }
     var qty by remember { mutableStateOf("1") }
     var price by remember { mutableStateOf("0") }
     var partyName by remember { mutableStateOf("") }
+    var selectedItem by remember { mutableStateOf<CatalogItem?>(null) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Bills", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            text = "Add Sale",
+            text = "Add Voucher",
             modifier = Modifier
                 .clickable { showDialog = true }
                 .padding(8.dp),
             color = MaterialTheme.colorScheme.primary,
         )
+        Text("History: ${vouchers.size} vouchers", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(vouchers, key = { it.id }) { v ->
                 Row(
@@ -404,6 +407,7 @@ private fun BillList(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(v.number)
+                    Text(v.kind.name)
                     Text(v.partyName.ifBlank { "Cash" })
                     Text(v.totals(false).totalAmount.toPlainString())
                     Text(
@@ -424,29 +428,60 @@ private fun BillList(
                     modifier = Modifier.clickable {
                         val q = qty.toBigDecimalOrNull() ?: BigDecimal.ONE
                         val p = price.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                        val name = selectedItem?.name ?: itemName.ifBlank { "Item" }
                         val line = VoucherLine(
-                            itemName = itemName.ifBlank { "Item" },
+                            itemId = selectedItem?.id,
+                            itemName = name,
                             quantity = q,
                             unit = "pcs",
                             unitPrice = p,
                         )
                         val party = parties.firstOrNull { it.name == partyName }
-                        onCreateSale(party, listOf(line))
+                        val k = if (kind == "Sale") com.glassbill.domain.DocumentKind.Sale else com.glassbill.domain.DocumentKind.Purchase
+                        onCreateVoucher(k, party, listOf(line))
                         showDialog = false
                         itemName = ""
                         qty = "1"
                         price = "0"
                         partyName = ""
+                        selectedItem = null
                     },
                 )
             },
             dismissButton = {
                 Text("Cancel", modifier = Modifier.clickable { showDialog = false })
             },
-            title = { Text("New Sale") },
+            title = { Text("New $kind") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextField(value = itemName, onValueChange = { itemName = it }, label = { Text("Item") })
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("Sale", "Purchase").forEach { k ->
+                            Text(
+                                text = k,
+                                modifier = Modifier
+                                    .clickable { kind = k }
+                                    .background(
+                                        if (kind == k) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                        RoundedCornerShape(999.dp),
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = if (kind == k) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (items.isNotEmpty()) {
+                        Text("Pick item:", style = MaterialTheme.typography.labelMedium)
+                        items.take(5).forEach { it ->
+                            Text(
+                                text = it.name,
+                                modifier = Modifier
+                                    .clickable { selectedItem = it; itemName = it.name; price = (it.salePriceMinor?.toString() ?: "0") }
+                                    .padding(4.dp),
+                                color = if (selectedItem?.id == it.id) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                    TextField(value = itemName, onValueChange = { itemName = it }, label = { Text("Item name") })
                     TextField(value = qty, onValueChange = { qty = it }, label = { Text("Qty") })
                     TextField(value = price, onValueChange = { price = it }, label = { Text("Price") })
                     TextField(value = partyName, onValueChange = { partyName = it }, label = { Text("Party (optional)") })

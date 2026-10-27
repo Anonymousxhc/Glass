@@ -135,12 +135,12 @@ class GlassBillController(context: Context) {
         }
     }
 
-    fun createSale(party: Party?, lines: List<VoucherLine>, paidMinor: Long = 0) {
+    fun createVoucher(kind: DocumentKind, party: Party?, lines: List<VoucherLine>, paidMinor: Long = 0) {
         scope.launch {
             val s = _session.value ?: return@launch
-            val number = s.numberSeries.next(DocumentKind.Sale)
+            val number = s.numberSeries.next(kind)
             val voucher = Voucher(
-                kind = DocumentKind.Sale,
+                kind = kind,
                 number = number,
                 partyId = party?.id,
                 partyName = party?.name ?: "",
@@ -148,13 +148,14 @@ class GlassBillController(context: Context) {
                 paidAmountMinor = paidMinor,
             )
             s.vouchers.save(voucher)
+            val deltaSign = if (kind == DocumentKind.Sale) -1 else 1
             lines.mapNotNull { it.itemId }.distinct().forEach { itemId ->
                 val line = lines.first { it.itemId == itemId }
                 s.stock.save(
                     com.glassbill.domain.StockMovement(
                         itemId = itemId,
                         voucherId = voucher.id,
-                        quantityDelta = line.quantity.negate(),
+                        quantityDelta = line.quantity.multiply(java.math.BigDecimal(deltaSign)),
                     ),
                 )
             }
