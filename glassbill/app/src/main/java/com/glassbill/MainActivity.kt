@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,12 +29,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -526,24 +529,58 @@ private fun FloatingNavigation(
     quality: GlassQuality,
     modifier: Modifier = Modifier,
 ) {
+    var barWidth by remember { mutableStateOf(0) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val tabCount = Destination.entries.size
+    val tabWidthPx = if (tabCount > 0 && barWidth > 0) barWidth / tabCount else 0
+    val selectedIndex = Destination.entries.indexOf(selected)
+    val indicatorOffset = remember { androidx.compose.animation.core.Animatable(0f) }
+    LaunchedEffect(selectedIndex, tabWidthPx) {
+        if (tabWidthPx > 0) {
+            indicatorOffset.animateTo(
+                selectedIndex * tabWidthPx.toFloat(),
+                animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
+            )
+        }
+    }
     GlassSurface(
         backdrop = backdrop,
         quality = quality,
         shape = RoundedCornerShape(30.dp),
         modifier = modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(PaddingValues(horizontal = 8.dp, vertical = 10.dp)),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .onSizeChanged { barWidth = it.width }
+                .padding(PaddingValues(horizontal = 8.dp, vertical = 10.dp)),
         ) {
-            Destination.entries.forEach { destination ->
-                FloatingNavigationItem(
-                    destination = destination,
-                    selected = destination == selected,
-                    onClick = { onSelected(destination) },
-                    modifier = Modifier.weight(1f),
-                )
+            // Sliding glass indicator pill
+            if (tabWidthPx > 0) {
+                GlassSurface(
+                    backdrop = backdrop,
+                    quality = quality,
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .offset(x = with(density) { indicatorOffset.value.toDp() })
+                        .width(with(density) { (tabWidthPx - 16).toDp() })
+                        .height(44.dp)
+                        .align(Alignment.CenterStart),
+                ) {}
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Destination.entries.forEach { destination ->
+                    FloatingNavigationItem(
+                        destination = destination,
+                        selected = destination == selected,
+                        onClick = { onSelected(destination) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
