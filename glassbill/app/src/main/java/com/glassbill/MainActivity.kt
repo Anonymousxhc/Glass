@@ -34,9 +34,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -55,6 +60,7 @@ import com.glassbill.domain.PartyRole
 import com.glassbill.domain.Voucher
 import com.glassbill.domain.VoucherLine
 import java.math.BigDecimal
+import kotlinx.coroutines.launch
 import com.glassbill.ui.GlassBillTheme
 import com.glassbill.ui.GlassQuality
 import com.glassbill.ui.GlassSurface
@@ -569,9 +575,11 @@ private fun FloatingNavigation(
     val tabCount = Destination.entries.size
     val tabWidthPx = if (tabCount > 0 && barWidth > 0) barWidth / tabCount else 0
     val selectedIndex = Destination.entries.indexOf(selected)
+    var isDragging by remember { mutableStateOf(false) }
+    val dragScope = rememberCoroutineScope()
     val indicatorOffset = remember { androidx.compose.animation.core.Animatable(0f) }
     LaunchedEffect(selectedIndex, tabWidthPx) {
-        if (tabWidthPx > 0) {
+        if (tabWidthPx > 0 && !isDragging) {
             indicatorOffset.animateTo(
                 selectedIndex * tabWidthPx.toFloat(),
                 animationSpec = spring(dampingRatio = 0.7f, stiffness = Spring.StiffnessMediumLow),
@@ -588,7 +596,23 @@ private fun FloatingNavigation(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(PaddingValues(horizontal = 8.dp, vertical = 10.dp))
-                .onSizeChanged { barWidth = it.width },
+                .onSizeChanged { barWidth = it.width }
+                .pointerInput(tabWidthPx) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { isDragging = true },
+                        onHorizontalDrag = { _, dragAmount ->
+                            dragScope.launch {
+                                indicatorOffset.snapTo((indicatorOffset.value + dragAmount).coerceIn(0f, (tabCount - 1) * tabWidthPx.toFloat()))
+                            }
+                        },
+                        onDragEnd = {
+                            isDragging = false
+                            val nearest = (indicatorOffset.value / tabWidthPx).toInt().coerceIn(0, tabCount - 1)
+                            onSelected(Destination.entries[nearest])
+                        },
+                        onDragCancel = { isDragging = false },
+                    )
+                },
         ) {
             // Sliding glass indicator pill
             if (tabWidthPx > 0) {
@@ -628,16 +652,27 @@ private fun FloatingNavigationItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (selected) 1.08f else 1f,
-        animationSpec = spring(dampingRatio = 0.65f, stiffness = Spring.StiffnessLow),
+        targetValue = when {
+            isPressed -> 0.78f
+            selected -> 1.2f
+            else -> 1f
+        },
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMedium),
         label = "tab-${destination.name}",
     )
     Column(
         modifier = modifier
             .scale(scale)
             .semantics { this.selected = selected }
-            .clickable(role = Role.Tab, onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick,
+            )
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
