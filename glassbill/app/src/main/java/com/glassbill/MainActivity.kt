@@ -45,8 +45,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.glassbill.data.CompanySummary
 import com.glassbill.domain.CompanyId
+import com.glassbill.domain.CatalogItem
+import com.glassbill.domain.ItemKind
 import com.glassbill.domain.Party
 import com.glassbill.domain.PartyRole
+import com.glassbill.domain.Voucher
+import com.glassbill.domain.VoucherLine
+import java.math.BigDecimal
 import com.glassbill.ui.GlassBillTheme
 import com.glassbill.ui.GlassQuality
 import com.glassbill.ui.GlassSurface
@@ -123,6 +128,7 @@ private fun DashboardContent(
     val currentId by controller.currentCompanyId.collectAsState()
     val parties by controller.parties.collectAsState()
     val profile by controller.profile.collectAsState()
+    var showMore by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.padding(horizontal = 24.dp, vertical = 32.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -145,11 +151,39 @@ private fun DashboardContent(
         )
         SummaryRow(companies = companies.size, parties = parties.size, items = 0)
         QualitySelector(selected = quality, onSelected = onQualityChanged)
-        if (selectedDestination == Destination.Parties) {
+        Text(
+            text = "More features",
+            modifier = Modifier.clickable { showMore = true },
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+        )
+        if (showMore) {
+            MoreScreen(onBack = { showMore = false })
+        } else if (selectedDestination == Destination.Parties) {
             PartyList(
                 parties = parties,
                 onAdd = { controller.addParty(it) },
                 onDelete = { controller.deleteParty(it) },
+            )
+        }
+        if (selectedDestination == Destination.Bills) {
+            BillList(
+                vouchers = controller.vouchers.collectAsState().value,
+                parties = parties,
+                items = controller.items.collectAsState().value,
+                onCreateSale = { party, lines -> controller.createSale(party, lines) },
+                onDelete = { controller.deleteVoucher(it) },
+            )
+        }
+        if (selectedDestination == Destination.Reports) {
+            ReportList()
+        }
+        if (selectedDestination == Destination.Items) {
+            ItemList(
+                items = controller.items.collectAsState().value,
+                units = controller.units.collectAsState().value,
+                taxRates = controller.taxRates.collectAsState().value,
+                onAdd = { controller.addItem(it) },
             )
         }
     }
@@ -335,6 +369,152 @@ private fun PartyList(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BillList(
+    vouchers: List<Voucher>,
+    parties: List<Party>,
+    items: List<CatalogItem>,
+    onCreateSale: (Party?, List<VoucherLine>) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    var showDialog by remember { mutableStateOf(false) }
+    var itemName by remember { mutableStateOf("") }
+    var qty by remember { mutableStateOf("1") }
+    var price by remember { mutableStateOf("0") }
+    var partyName by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Bills", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            text = "Add Sale",
+            modifier = Modifier
+                .clickable { showDialog = true }
+                .padding(8.dp),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(vouchers, key = { it.id }) { v ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(v.number)
+                    Text(v.partyName.ifBlank { "Cash" })
+                    Text(v.totals(false).totalAmount.toPlainString())
+                    Text(
+                        text = "Delete",
+                        modifier = Modifier.clickable { onDelete(v.id) },
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+        }
+    }
+    if (showDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDialog = false },
+            confirmButton = {
+                Text(
+                    "Save",
+                    modifier = Modifier.clickable {
+                        val q = qty.toBigDecimalOrNull() ?: BigDecimal.ONE
+                        val p = price.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                        val line = VoucherLine(
+                            itemName = itemName.ifBlank { "Item" },
+                            quantity = q,
+                            unit = "pcs",
+                            unitPrice = p,
+                        )
+                        val party = parties.firstOrNull { it.name == partyName }
+                        onCreateSale(party, listOf(line))
+                        showDialog = false
+                        itemName = ""
+                        qty = "1"
+                        price = "0"
+                        partyName = ""
+                    },
+                )
+            },
+            dismissButton = {
+                Text("Cancel", modifier = Modifier.clickable { showDialog = false })
+            },
+            title = { Text("New Sale") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextField(value = itemName, onValueChange = { itemName = it }, label = { Text("Item") })
+                    TextField(value = qty, onValueChange = { qty = it }, label = { Text("Qty") })
+                    TextField(value = price, onValueChange = { price = it }, label = { Text("Price") })
+                    TextField(value = partyName, onValueChange = { partyName = it }, label = { Text("Party (optional)") })
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ItemList(
+    items: List<CatalogItem>,
+    units: List<com.glassbill.domain.MeasurementUnit>,
+    taxRates: List<com.glassbill.domain.TaxRate>,
+    onAdd: (CatalogItem) -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Items", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextField(value = name, onValueChange = { name = it }, label = { Text("Item name") }, modifier = Modifier.weight(1f))
+            Text(
+                text = "Add",
+                modifier = Modifier
+                    .clickable {
+                        if (name.isNotBlank()) {
+                            onAdd(CatalogItem(id = System.currentTimeMillis().toString(), name = name.trim(), itemKind = ItemKind.Goods))
+                            name = ""
+                        }
+                    }
+                    .padding(8.dp),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            items(items, key = { it.id }) { item ->
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(item.name)
+                    Text(item.itemKind.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportList() {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Reports", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        listOf("Sales Summary", "Purchase Summary", "Party Statement", "Stock Report", "Profit & Loss", "GST Summary").forEach { name ->
+            Text(name, modifier = Modifier.padding(vertical = 4.dp))
+        }
+    }
+}
+
+@Composable
+private fun MoreScreen(onBack: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Back", modifier = Modifier.clickable { onBack() }, color = MaterialTheme.colorScheme.primary)
+        Text("More features", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        listOf(
+            "M3: Party Statement", "M3: Sales/Purchase Report", "M3: Stock Report",
+            "M3: Profit & Loss", "M3: GST Summary",
+            "M4: Reminders", "M4: Loyalty Points", "M4: Multi-Currency", "M4: TDS/TCS",
+            "M5: Manufacturing", "M5: Fixed Assets", "M5: Bank Statement Import",
+            "M5: Voice Entry", "M5: Recycle Bin", "M5: Fiscal Year", "M5: Backup & Restore",
+        ).forEach { name ->
+            Text(name, modifier = Modifier.padding(vertical = 2.dp))
+        }
+        Text("These modules are scaffolded; full implementation follows per milestone.",
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

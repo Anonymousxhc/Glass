@@ -6,7 +6,12 @@ import com.glassbill.domain.CompanyId
 import com.glassbill.domain.MeasurementUnit
 import com.glassbill.domain.Party
 import com.glassbill.domain.PartyRole
+import com.glassbill.domain.NumberSeries
+import com.glassbill.domain.PaymentRecord
+import com.glassbill.domain.StockMovement
 import com.glassbill.domain.TaxRate
+import com.glassbill.domain.Voucher
+import java.math.BigDecimal
 import java.time.Instant
 
 data class CompanySummary(
@@ -69,6 +74,32 @@ interface PreferenceRepository {
     suspend fun all(): Map<String, String>
 }
 
+interface VoucherRepository {
+    suspend fun list(kind: com.glassbill.domain.DocumentKind? = null): List<Voucher>
+    suspend fun get(id: String): Voucher?
+    suspend fun save(voucher: Voucher)
+    suspend fun delete(id: String)
+    suspend fun search(query: String): List<Voucher>
+}
+
+interface PaymentRepository {
+    suspend fun list(): List<PaymentRecord>
+    suspend fun save(payment: PaymentRecord)
+    suspend fun delete(id: String)
+}
+
+interface StockMovementRepository {
+    suspend fun list(itemId: String? = null): List<StockMovement>
+    suspend fun save(movement: StockMovement)
+    suspend fun availableQuantity(itemId: String): BigDecimal
+}
+
+interface NumberSeriesRepository {
+    suspend fun get(kind: com.glassbill.domain.DocumentKind): NumberSeries
+    suspend fun save(series: NumberSeries)
+    suspend fun next(kind: com.glassbill.domain.DocumentKind): String
+}
+
 interface CompanySession {
     val companyId: CompanyId
     val parties: PartyRepository
@@ -77,6 +108,10 @@ interface CompanySession {
     val items: CatalogItemRepository
     val businessProfile: BusinessProfileRepository
     val preferences: PreferenceRepository
+    val vouchers: VoucherRepository
+    val payments: PaymentRepository
+    val stock: StockMovementRepository
+    val numberSeries: NumberSeriesRepository
 }
 
 interface CompanyOpener {

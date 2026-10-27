@@ -7,7 +7,11 @@ import com.glassbill.data.CompanyRegistry
 import com.glassbill.data.CompanySession
 import com.glassbill.domain.BusinessProfile
 import com.glassbill.domain.CompanyId
+import com.glassbill.domain.DocumentKind
 import com.glassbill.domain.Party
+import com.glassbill.domain.Voucher
+import com.glassbill.domain.VoucherLine
+import com.glassbill.domain.VoucherStatus
 import com.glassbill.persistence.CompanyDatabaseFactory
 import com.glassbill.persistence.RoomCompanyOpener
 import com.glassbill.persistence.RoomCompanyRegistry
@@ -46,6 +50,18 @@ class GlassBillController(context: Context) {
     private val _profile = MutableStateFlow<BusinessProfile?>(null)
     val profile: StateFlow<BusinessProfile?> = _profile.asStateFlow()
 
+    private val _vouchers = MutableStateFlow<List<Voucher>>(emptyList())
+    val vouchers: StateFlow<List<Voucher>> = _vouchers.asStateFlow()
+
+    private val _items = MutableStateFlow<List<com.glassbill.domain.CatalogItem>>(emptyList())
+    val items: StateFlow<List<com.glassbill.domain.CatalogItem>> = _items.asStateFlow()
+
+    private val _units = MutableStateFlow<List<com.glassbill.domain.MeasurementUnit>>(emptyList())
+    val units: StateFlow<List<com.glassbill.domain.MeasurementUnit>> = _units.asStateFlow()
+
+    private val _taxRates = MutableStateFlow<List<com.glassbill.domain.TaxRate>>(emptyList())
+    val taxRates: StateFlow<List<com.glassbill.domain.TaxRate>> = _taxRates.asStateFlow()
+
     init {
         scope.launch {
             refreshCompanies()
@@ -70,6 +86,10 @@ class GlassBillController(context: Context) {
         val s = _session.value ?: return
         _parties.value = s.parties.list()
         _profile.value = s.businessProfile.get()
+        _vouchers.value = s.vouchers.list()
+        _items.value = s.items.list()
+        _units.value = s.units.list()
+        _taxRates.value = s.taxRates.list()
     }
 
     fun openCompany(id: CompanyId) {
@@ -111,6 +131,47 @@ class GlassBillController(context: Context) {
     fun updateProfile(profile: BusinessProfile) {
         scope.launch {
             _session.value?.businessProfile?.save(profile)
+            loadData()
+        }
+    }
+
+    fun createSale(party: Party?, lines: List<VoucherLine>, paidMinor: Long = 0) {
+        scope.launch {
+            val s = _session.value ?: return@launch
+            val number = s.numberSeries.next(DocumentKind.Sale)
+            val voucher = Voucher(
+                kind = DocumentKind.Sale,
+                number = number,
+                partyId = party?.id,
+                partyName = party?.name ?: "",
+                lines = lines,
+                paidAmountMinor = paidMinor,
+            )
+            s.vouchers.save(voucher)
+            lines.mapNotNull { it.itemId }.distinct().forEach { itemId ->
+                val line = lines.first { it.itemId == itemId }
+                s.stock.save(
+                    com.glassbill.domain.StockMovement(
+                        itemId = itemId,
+                        voucherId = voucher.id,
+                        quantityDelta = line.quantity.negate(),
+                    ),
+                )
+            }
+            loadData()
+        }
+    }
+
+    fun deleteVoucher(id: String) {
+        scope.launch {
+            _session.value?.vouchers?.delete(id)
+            loadData()
+        }
+    }
+
+    fun addItem(item: com.glassbill.domain.CatalogItem) {
+        scope.launch {
+            _session.value?.items?.save(item)
             loadData()
         }
     }

@@ -14,6 +14,10 @@ import androidx.room.RoomDatabase
 import androidx.room.Update
 import com.glassbill.data.BusinessProfileRepository
 import com.glassbill.data.CatalogItemRepository
+import com.glassbill.data.NumberSeriesRepository
+import com.glassbill.data.PaymentRepository
+import com.glassbill.data.StockMovementRepository
+import com.glassbill.data.VoucherRepository
 import com.glassbill.data.CompanyOpener
 import com.glassbill.data.CompanyRegistry
 import com.glassbill.data.CompanySession
@@ -203,6 +207,131 @@ interface PreferenceDao {
     suspend fun all(): List<PreferenceEntity>
 }
 
+@Entity(tableName = "vouchers")
+data class VoucherEntity(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val number: String,
+    val partyId: String?,
+    val partyName: String,
+    val dateEpochMillis: Long,
+    val discountPercent: String,
+    val roundOff: String,
+    val paidAmountMinor: Long,
+    val dueDateEpochMillis: Long?,
+    val status: String,
+    val notes: String,
+)
+
+@Entity(tableName = "voucher_lines")
+data class VoucherLineEntity(
+    @PrimaryKey val id: String,
+    val voucherId: String,
+    val itemId: String?,
+    val itemName: String,
+    val quantity: String,
+    val unit: String,
+    val unitPrice: String,
+    val discountPercent: String,
+    val taxLabel: String?,
+    val taxPercent: String?,
+    val taxIncludedInPrice: Boolean,
+)
+
+@Entity(tableName = "payments")
+data class PaymentEntity(
+    @PrimaryKey val id: String,
+    val kind: String,
+    val number: String,
+    val partyId: String,
+    val partyName: String,
+    val amountMinor: Long,
+    val method: String,
+    val dateEpochMillis: Long,
+    val allocatedVoucherIds: String,
+    val notes: String,
+)
+
+@Entity(tableName = "stock_movements")
+data class StockMovementEntity(
+    @PrimaryKey val id: String,
+    val itemId: String,
+    val voucherId: String,
+    val quantityDelta: String,
+    val dateEpochMillis: Long,
+)
+
+@Entity(tableName = "number_series")
+data class NumberSeriesEntity(
+    @PrimaryKey val kind: String,
+    val prefix: String,
+    val nextNumber: Long,
+    val padding: Int,
+)
+
+@Dao
+interface VoucherDao {
+    @Query("SELECT * FROM vouchers ORDER BY dateEpochMillis DESC")
+    suspend fun list(): List<VoucherEntity>
+
+    @Query("SELECT * FROM vouchers WHERE id = :id")
+    suspend fun get(id: String): VoucherEntity?
+
+    @Query("SELECT * FROM vouchers WHERE kind = :kind ORDER BY dateEpochMillis DESC")
+    suspend fun listByKind(kind: String): List<VoucherEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: VoucherEntity)
+
+    @Query("DELETE FROM vouchers WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
+interface VoucherLineDao {
+    @Query("SELECT * FROM voucher_lines WHERE voucherId = :voucherId")
+    suspend fun listFor(voucherId: String): List<VoucherLineEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: VoucherLineEntity)
+
+    @Query("DELETE FROM voucher_lines WHERE voucherId = :voucherId")
+    suspend fun deleteFor(voucherId: String)
+}
+
+@Dao
+interface PaymentDao {
+    @Query("SELECT * FROM payments ORDER BY dateEpochMillis DESC")
+    suspend fun list(): List<PaymentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: PaymentEntity)
+
+    @Query("DELETE FROM payments WHERE id = :id")
+    suspend fun delete(id: String)
+}
+
+@Dao
+interface StockMovementDao {
+    @Query("SELECT * FROM stock_movements WHERE itemId = :itemId")
+    suspend fun listForItem(itemId: String): List<StockMovementEntity>
+
+    @Query("SELECT * FROM stock_movements")
+    suspend fun listAll(): List<StockMovementEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: StockMovementEntity)
+}
+
+@Dao
+interface NumberSeriesDao {
+    @Query("SELECT * FROM number_series WHERE kind = :kind")
+    suspend fun get(kind: String): NumberSeriesEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: NumberSeriesEntity)
+}
+
 @Database(
     entities = [
         BusinessProfileEntity::class,
@@ -212,6 +341,11 @@ interface PreferenceDao {
         TaxRateEntity::class,
         CatalogItemEntity::class,
         PreferenceEntity::class,
+        VoucherEntity::class,
+        VoucherLineEntity::class,
+        PaymentEntity::class,
+        StockMovementEntity::class,
+        NumberSeriesEntity::class,
     ],
     version = 1,
     exportSchema = false,
@@ -223,6 +357,11 @@ abstract class CompanyDatabase : RoomDatabase() {
     abstract fun taxRateDao(): TaxRateDao
     abstract fun catalogItemDao(): CatalogItemDao
     abstract fun preferenceDao(): PreferenceDao
+    abstract fun voucherDao(): VoucherDao
+    abstract fun voucherLineDao(): VoucherLineDao
+    abstract fun paymentDao(): PaymentDao
+    abstract fun stockMovementDao(): StockMovementDao
+    abstract fun numberSeriesDao(): NumberSeriesDao
 }
 
 class CompanyDatabaseFactory(private val context: Context) {
@@ -308,6 +447,65 @@ class RoomCompanySession(
         override suspend fun all(): Map<String, String> =
             db.preferenceDao().all().associate { it.key to it.value }
     }
+    override val vouchers: VoucherRepository = object : VoucherRepository {
+        override suspend fun list(kind: com.glassbill.domain.DocumentKind?): List<com.glassbill.domain.Voucher> {
+            val rows = if (kind == null) db.voucherDao().list() else db.voucherDao().listByKind(kind.name)
+            return rows.map { it.toDomain(db.voucherLineDao().listFor(it.id)) }
+        }
+        override suspend fun get(id: String): com.glassbill.domain.Voucher? {
+            val e = db.voucherDao().get(id) ?: return null
+            return e.toDomain(db.voucherLineDao().listFor(id))
+        }
+        override suspend fun save(voucher: com.glassbill.domain.Voucher) {
+            db.voucherDao().upsert(voucher.toEntity())
+            db.voucherLineDao().deleteFor(voucher.id)
+            voucher.lines.forEach { line ->
+                db.voucherLineDao().upsert(line.toEntity(voucher.id))
+            }
+        }
+        override suspend fun delete(id: String) {
+            db.voucherLineDao().deleteFor(id)
+            db.voucherDao().delete(id)
+        }
+        override suspend fun search(query: String): List<com.glassbill.domain.Voucher> =
+            list(null).filter { it.number.contains(query, true) || it.partyName.contains(query, true) }
+    }
+    override val payments: PaymentRepository = object : PaymentRepository {
+        override suspend fun list(): List<com.glassbill.domain.PaymentRecord> =
+            db.paymentDao().list().map { it.toDomain() }
+        override suspend fun save(payment: com.glassbill.domain.PaymentRecord) {
+            db.paymentDao().upsert(payment.toEntity())
+        }
+        override suspend fun delete(id: String) { db.paymentDao().delete(id) }
+    }
+    override val stock: StockMovementRepository = object : StockMovementRepository {
+        override suspend fun list(itemId: String?): List<com.glassbill.domain.StockMovement> {
+            val rows = if (itemId == null) db.stockMovementDao().listAll() else db.stockMovementDao().listForItem(itemId)
+            return rows.map { it.toDomain() }
+        }
+        override suspend fun save(movement: com.glassbill.domain.StockMovement) {
+            db.stockMovementDao().upsert(movement.toEntity())
+        }
+        override suspend fun availableQuantity(itemId: String): java.math.BigDecimal {
+            val movements = db.stockMovementDao().listForItem(itemId)
+            return movements.fold(java.math.BigDecimal.ZERO) { acc, m -> acc + java.math.BigDecimal(m.quantityDelta) }
+        }
+    }
+    override val numberSeries: NumberSeriesRepository = object : NumberSeriesRepository {
+        override suspend fun get(kind: com.glassbill.domain.DocumentKind): com.glassbill.domain.NumberSeries {
+            val e = db.numberSeriesDao().get(kind.name)
+            return e?.toDomain() ?: com.glassbill.domain.NumberSeries(kind)
+        }
+        override suspend fun save(series: com.glassbill.domain.NumberSeries) {
+            db.numberSeriesDao().upsert(series.toEntity())
+        }
+        override suspend fun next(kind: com.glassbill.domain.DocumentKind): String {
+            val series = get(kind)
+            val display = series.nextDisplay()
+            save(series.advance())
+            return display
+        }
+    }
 }
 
 class RoomCompanyOpener(
@@ -360,3 +558,106 @@ private fun CatalogItem.toEntity() = CatalogItemEntity(
 )
 private fun BusinessProfileEntity.toDomain() = BusinessProfile(displayName, phone, email, address, taxRegistration)
 private fun BusinessProfile.toEntity() = BusinessProfileEntity(displayName = displayName, phone = phone, email = email, address = address, taxRegistration = taxRegistration)
+
+private fun VoucherEntity.toDomain(lines: List<VoucherLineEntity>) = com.glassbill.domain.Voucher(
+    id = id,
+    kind = com.glassbill.domain.DocumentKind.valueOf(kind),
+    number = number,
+    partyId = partyId,
+    partyName = partyName,
+    date = java.time.Instant.ofEpochMilli(dateEpochMillis),
+    lines = lines.map { it.toDomain() },
+    discountPercent = java.math.BigDecimal(discountPercent),
+    roundOff = java.math.BigDecimal(roundOff),
+    paidAmountMinor = paidAmountMinor,
+    dueDate = dueDateEpochMillis?.let { java.time.Instant.ofEpochMilli(it) },
+    status = com.glassbill.domain.VoucherStatus.valueOf(status),
+    notes = notes,
+)
+private fun com.glassbill.domain.Voucher.toEntity() = VoucherEntity(
+    id = id,
+    kind = kind.name,
+    number = number,
+    partyId = partyId,
+    partyName = partyName,
+    dateEpochMillis = date.toEpochMilli(),
+    discountPercent = discountPercent.toPlainString(),
+    roundOff = roundOff.toPlainString(),
+    paidAmountMinor = paidAmountMinor,
+    dueDateEpochMillis = dueDate?.toEpochMilli(),
+    status = status.name,
+    notes = notes,
+)
+private fun VoucherLineEntity.toDomain() = com.glassbill.domain.VoucherLine(
+    itemId = itemId,
+    itemName = itemName,
+    quantity = java.math.BigDecimal(quantity),
+    unit = unit,
+    unitPrice = java.math.BigDecimal(unitPrice),
+    discountPercent = java.math.BigDecimal(discountPercent),
+    taxRate = taxLabel?.let { com.glassbill.domain.TaxRate(it, java.math.BigDecimal(taxPercent ?: "0")) },
+    taxIncludedInPrice = taxIncludedInPrice,
+)
+private fun com.glassbill.domain.VoucherLine.toEntity(voucherId: String) = VoucherLineEntity(
+    id = java.util.UUID.randomUUID().toString(),
+    voucherId = voucherId,
+    itemId = itemId,
+    itemName = itemName,
+    quantity = quantity.toPlainString(),
+    unit = unit,
+    unitPrice = unitPrice.toPlainString(),
+    discountPercent = discountPercent.toPlainString(),
+    taxLabel = taxRate?.label,
+    taxPercent = taxRate?.percent?.toPlainString(),
+    taxIncludedInPrice = taxIncludedInPrice,
+)
+private fun PaymentEntity.toDomain() = com.glassbill.domain.PaymentRecord(
+    id = id,
+    kind = com.glassbill.domain.DocumentKind.valueOf(kind),
+    number = number,
+    partyId = partyId,
+    partyName = partyName,
+    amountMinor = amountMinor,
+    method = com.glassbill.domain.PaymentMethod.valueOf(method),
+    date = java.time.Instant.ofEpochMilli(dateEpochMillis),
+    allocatedVoucherIds = allocatedVoucherIds.split(",").filter { it.isNotBlank() },
+    notes = notes,
+)
+private fun com.glassbill.domain.PaymentRecord.toEntity() = PaymentEntity(
+    id = id,
+    kind = kind.name,
+    number = number,
+    partyId = partyId,
+    partyName = partyName,
+    amountMinor = amountMinor,
+    method = method.name,
+    dateEpochMillis = date.toEpochMilli(),
+    allocatedVoucherIds = allocatedVoucherIds.joinToString(","),
+    notes = notes,
+)
+private fun StockMovementEntity.toDomain() = com.glassbill.domain.StockMovement(
+    id = id,
+    itemId = itemId,
+    voucherId = voucherId,
+    quantityDelta = java.math.BigDecimal(quantityDelta),
+    date = java.time.Instant.ofEpochMilli(dateEpochMillis),
+)
+private fun com.glassbill.domain.StockMovement.toEntity() = StockMovementEntity(
+    id = id,
+    itemId = itemId,
+    voucherId = voucherId,
+    quantityDelta = quantityDelta.toPlainString(),
+    dateEpochMillis = date.toEpochMilli(),
+)
+private fun NumberSeriesEntity.toDomain() = com.glassbill.domain.NumberSeries(
+    kind = com.glassbill.domain.DocumentKind.valueOf(kind),
+    prefix = prefix,
+    nextNumber = nextNumber,
+    padding = padding,
+)
+private fun com.glassbill.domain.NumberSeries.toEntity() = NumberSeriesEntity(
+    kind = kind.name,
+    prefix = prefix,
+    nextNumber = nextNumber,
+    padding = padding,
+)
