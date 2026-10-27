@@ -8,6 +8,8 @@ local.properties
 
 # The APK under analysis and derived reverse-engineering artifacts are inputs, not source.
 vyapar.apks
+.qoder/
+work/dex/
 work/apks/
 work/dex/raw/
 work/dart_out/

@@ -32,9 +32,19 @@ Read this fully before acting. This project was started in a Qoder session; you 
 - M5: long tail: manufacturing, fixed assets, bank statement import, Vaani-voice equivalent (local), recycle bin, FY operations, backup/restore local files
 Each milestone = compiling + unit tests green + pushed so user's GitHub Actions produces the APK.
 
-## Pending from previous session (do NOT duplicate)
-- A lean RE workflow is finishing the last 4 dimension reports, then a verification pass will re-audit them (user explicitly wants that restored — wait for it or perform it yourself: re-run each claim's evidence commands, mark confirmed/refuted in the findings file).
-- A scaffold agent is creating `glassbill/` with resolved AGP/Kotlin/Gradle/Compose-BOM/backdrop/miuix versions; check its SETUP.md before regenerating anything.
+## REMAINING RE WORK — now owned by YOU (Codex). Previous session is fully stopped; nothing is coming.
+State: 6 of 9 dimension reports exist in work/findings/ (db-schema, txn-model, reports-tax, print-export, server-api = adversarially verified; monetization = NOT yet audited). Missing: sync-backup, dart-ui, masters-settings. FEATURE_MAP.md does NOT exist — synthesis never ran.
+Do in this order:
+1. Produce the 3 missing dimension reports yourself using the same evidence discipline (datasets + tools below; report format + observed/inferred/unverified labels per work/RECORD.md):
+   - sync-backup: classes grep syncAndShare|syncFlow|userRolePermission|Services/*, droidasc getclass GoogleDriveAutoBackupService + SyncAndShareActivity; strings for backup/.vyp/zip/P2P formats.
+   - dart-ui: work/dart_out/scripts.jsonl (package: paths survive obfuscation) + string_refs.jsonl (UI literals, method-channel names) + base.apk assets/composeResources listing (icon names) for the KMP module's feature.
+   - masters-settings: settings.activities.* class list + droidasc getclass on ~10 representative settings classes; grep invoice-numbering/VYAPAR.* setting keys (they live in kb_settings KV table — see db-schema.md).
+2. Verification pass: re-run the evidence commands of monetization.md + your 3 new reports; append CONFIRMED/REFUTED verdicts per claim (mirrors what the earlier verifiers did to the first 5 reports).
+3. Synthesize work/FEATURE_MAP.md from all 9 reports per the structure listed under Milestones context (domain catalog + data model + client/server boundary + open questions; flag unaudited claims).
+4. Then proceed to M1.
+Helpful: /tmp/dexstrings.txt may not exist — build it once: `strings -n 6 work/dex/raw/classes*.dex > /tmp/dexstrings.txt`, grep that file for all further string questions (one pass; 2-core box).
+glassbill/ status: scaffold agent died before landing SETUP.md — dir may be partial/unverified. Audit it (versions NOT proven); `./gradlew testDebugUnitTest` is the local truth-gate; rebuild the skeleton from scratch if the version set doesn't resolve.
+
 
 ## First actions for you (Codex)
 1. Read work/FEATURE_MAP.md (or findings/*.md if map not yet written) + RECORD.md.
