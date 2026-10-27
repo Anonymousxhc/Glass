@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
@@ -39,6 +41,7 @@ fun GlassSurface(
             shape = { shape },
             effects = {
                 blur(8.dp.toPx())
+                vibrancy()
             },
             highlight = { Highlight.Default },
             shadow = { Shadow.Default },
@@ -50,6 +53,8 @@ fun GlassSurface(
             shape = { shape },
             effects = {
                 blur(8.dp.toPx())
+                vibrancy()
+                lens(24.dp.toPx(), 24.dp.toPx(), depthEffect = true)
             },
             highlight = { Highlight.Default },
             shadow = { Shadow.Default },
