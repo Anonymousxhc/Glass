@@ -20,3 +20,6 @@ work/venv/
 
 # The visual reference is GPL-3.0 and is deliberately not part of GlassBill.
 work/reference/
+
+# Agent-local config (not part of the project)
+.commandcode/
