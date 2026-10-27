@@ -65,7 +65,7 @@ interface CompanyRegistryDao {
     suspend fun delete(record: CompanyRecordEntity)
 }
 
-@Database(entities = [CompanyRecordEntity::class], version = 1, exportSchema = false)
+@Database(entities = [CompanyRecordEntity::class], version = 2, exportSchema = false)
 abstract class RegistryDatabase : RoomDatabase() {
     abstract fun companyRegistryDao(): CompanyRegistryDao
 }
@@ -347,7 +347,7 @@ interface NumberSeriesDao {
         StockMovementEntity::class,
         NumberSeriesEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class CompanyDatabase : RoomDatabase() {
@@ -366,7 +366,9 @@ abstract class CompanyDatabase : RoomDatabase() {
 
 class CompanyDatabaseFactory(private val context: Context) {
     fun open(databaseFileName: String): CompanyDatabase =
-        Room.databaseBuilder(context, CompanyDatabase::class.java, databaseFileName).build()
+        Room.databaseBuilder(context, CompanyDatabase::class.java, databaseFileName)
+            .fallbackToDestructiveMigration()
+            .build()
 }
 
 class RoomCompanyRegistry(private val db: RegistryDatabase) : CompanyRegistry {

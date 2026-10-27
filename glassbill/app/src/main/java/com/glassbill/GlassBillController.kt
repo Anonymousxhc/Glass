@@ -30,7 +30,9 @@ class GlassBillController(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val registryDb: RegistryDatabase =
-        Room.databaseBuilder(appContext, RegistryDatabase::class.java, "registry.db").build()
+        Room.databaseBuilder(appContext, RegistryDatabase::class.java, "registry.db")
+            .fallbackToDestructiveMigration()
+            .build()
     private val registry: CompanyRegistry = RoomCompanyRegistry(registryDb)
     private val factory = CompanyDatabaseFactory(appContext)
     private val opener: CompanyOpener = RoomCompanyOpener(appContext, factory, registry)
