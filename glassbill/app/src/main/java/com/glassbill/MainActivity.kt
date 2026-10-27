@@ -73,22 +73,31 @@ private enum class Destination(val label: String) {
 private fun GlassBillApp(activity: MainActivity) {
     val controller = remember { GlassBillController(activity) }
     var selectedDestination by remember { mutableStateOf(Destination.Dashboard) }
-    var quality by remember { mutableStateOf(GlassQuality.Flat) }
+    var quality by remember { mutableStateOf(GlassQuality.Full) }
     GlassBillTheme(quality = quality) {
-        val backdrop = rememberLayerBackdrop()
+        val surfaceColor = MaterialTheme.colorScheme.background
+        val backdrop = rememberLayerBackdrop(onDraw = {
+            drawRect(surfaceColor)
+            drawContent()
+        })
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .layerBackdrop(backdrop),
+                .background(MaterialTheme.colorScheme.background),
         ) {
-            DashboardContent(
-                controller = controller,
-                selectedDestination = selectedDestination,
-                quality = quality,
-                onQualityChanged = { quality = it },
-                modifier = Modifier.fillMaxSize(),
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .layerBackdrop(backdrop),
+            ) {
+                DashboardContent(
+                    controller = controller,
+                    selectedDestination = selectedDestination,
+                    quality = quality,
+                    onQualityChanged = { quality = it },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
             FloatingNavigation(
                 backdrop = backdrop,
                 selected = selectedDestination,
