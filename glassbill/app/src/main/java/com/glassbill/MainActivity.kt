@@ -73,7 +73,7 @@ private enum class Destination(val label: String) {
 private fun GlassBillApp(activity: MainActivity) {
     val controller = remember { GlassBillController(activity) }
     var selectedDestination by remember { mutableStateOf(Destination.Dashboard) }
-    var quality by remember { mutableStateOf(GlassQuality.Full) }
+    var quality by remember { mutableStateOf(GlassQuality.Flat) }
     GlassBillTheme(quality = quality) {
         val backdrop = rememberLayerBackdrop()
         Box(
